@@ -21,13 +21,21 @@ export default function RecordingWorkspace() {
   // current URL. The browser itself still opens in its own separate window
   // exactly as before; this is purely an additional read-only view of it,
   // and never touches recording/playback control flow.
-  const [screenshotTick, setScreenshotTick] = useState(0);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [currentUrl, setCurrentUrl] = useState('');
 
   // Ref-based guard prevents a second stop request even before React re-renders
   // isSaving — a synchronous check that catches rapid double-clicks.
   const stopInFlight = useRef(false);
+
+  // Tracks whether we've ever shown a real frame this session. A transient
+  // 204 (screenshot thread busy servicing your actual clicks/typing) should
+  // not tear the preview back down to the placeholder — only the very first
+  // load-before-any-frame should show it. Without this, every busy poll
+  // flips the panel between the screenshot and the placeholder block,
+  // which reads as a flicker.
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     if (testId) {
@@ -50,9 +58,31 @@ export default function RecordingWorkspace() {
   useEffect(() => {
     if (!isRecording) {
       setPreviewLoaded(false);
+      setPreviewSrc(null);
+      hasLoadedOnceRef.current = false;
       return;
     }
-    const screenshotInterval = window.setInterval(() => setScreenshotTick(t => t + 1), 1500);
+    // Preload off-DOM before ever touching the visible <img>'s src. Setting an
+    // <img> element's src directly to a URL that 404s/204s makes the browser
+    // replace its rendered content with the broken-image icon immediately —
+    // that happens at the browser level regardless of any onError handler on
+    // the element, so it can't be prevented by gating React state alone. By
+    // loading into a throwaway Image() first and only committing previewSrc
+    // once that succeeds, the visible <img>'s src is never set to a failing
+    // URL, so a transient 204 (screenshot thread busy handling your actual
+    // clicks/typing) just leaves the last good frame on screen untouched.
+    const screenshotInterval = window.setInterval(() => {
+      const probe = new Image();
+      probe.onload = () => {
+        hasLoadedOnceRef.current = true;
+        setPreviewSrc(probe.src);
+        setPreviewLoaded(true);
+      };
+      probe.onerror = () => {
+        if (!hasLoadedOnceRef.current) setPreviewLoaded(false);
+      };
+      probe.src = recordingScreenshotUrl(Date.now());
+    }, 1500);
     const statusInterval = window.setInterval(() => {
       uiAutomationApi.getRecordingStatus()
         .then(status => setCurrentUrl(status.currentUrl))
@@ -71,6 +101,8 @@ export default function RecordingWorkspace() {
       await uiAutomationApi.startRecording(Number(testId));
       setIsRecording(true);
       setPreviewLoaded(false);
+      setPreviewSrc(null);
+      hasLoadedOnceRef.current = false;
       setCurrentUrl(test?.targetUrl ?? '');
       showToast('Recording started — interact with the browser window.', 'success');
     } catch (err: any) {
@@ -189,14 +221,14 @@ export default function RecordingWorkspace() {
                 </div>
               </div>
               <div style={{ position: 'relative', background: 'var(--bg-input)', minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <img
-                  key="recording-preview"
-                  src={recordingScreenshotUrl(screenshotTick)}
-                  onLoad={() => setPreviewLoaded(true)}
-                  onError={() => setPreviewLoaded(false)}
-                  alt="Live preview of the recording browser window"
-                  style={{ width: '100%', display: previewLoaded ? 'block' : 'none' }}
-                />
+                {previewSrc && (
+                  <img
+                    key="recording-preview"
+                    src={previewSrc}
+                    alt="Live preview of the recording browser window"
+                    style={{ width: '100%', display: previewLoaded ? 'block' : 'none' }}
+                  />
+                )}
                 {!previewLoaded && (
                   <div className="flex flex-col items-center text-muted" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
                     <RefreshCw size={22} className="animate-spin mb-3" />

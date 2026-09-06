@@ -75,12 +75,13 @@ export default function Dashboard() {
   // Derived together from `allRuns` (memoized on that single stable
   // reference) rather than three separate `?? []` fallbacks, which would
   // otherwise produce a fresh array identity every render.
-  const { standardRuns, dataDrivenRuns, accessibilityRuns } = useMemo(() => ({
+  const { standardRuns, dataDrivenRuns, accessibilityRuns, apiRuns } = useMemo(() => ({
     standardRuns: allRuns?.standardRuns ?? [],
     dataDrivenRuns: allRuns?.dataDrivenRuns ?? [],
     accessibilityRuns: allRuns?.accessibilityRuns ?? [],
+    apiRuns: allRuns?.apiRuns ?? [],
   }), [allRuns]);
-  const totalExecutions = standardRuns.length + dataDrivenRuns.length + accessibilityRuns.length;
+  const totalExecutions = standardRuns.length + dataDrivenRuns.length + accessibilityRuns.length + apiRuns.length;
 
   const dataDrivenTestCount = useMemo(
     () => new Set(dataDrivenRuns.map(r => r.testId).filter((id): id is number => id != null)).size,
@@ -91,19 +92,21 @@ export default function Dashboard() {
     { label: 'UI Automation', value: standardRuns.length, color: 'var(--primary)' },
     { label: 'Data Driven', value: dataDrivenRuns.length, color: 'var(--accent-purple)' },
     { label: 'Accessibility', value: accessibilityRuns.length, color: 'var(--accent-cyan)' },
-  ], [standardRuns, dataDrivenRuns, accessibilityRuns]);
+    { label: 'API Testing', value: apiRuns.length, color: 'var(--success)' },
+  ], [standardRuns, dataDrivenRuns, accessibilityRuns, apiRuns]);
 
   const statusDistribution = useMemo(() => {
     let ok = 0, failed = 0, running = 0;
     for (const r of standardRuns) { if (r.status === 'PASSED') ok++; else if (r.status === 'FAILED') failed++; else running++; }
     for (const r of dataDrivenRuns) { if (r.status === 'PASSED') ok++; else if (r.status === 'FAILED') failed++; else running++; }
     for (const r of accessibilityRuns) { if (r.status === 'COMPLETED') ok++; else if (r.status === 'FAILED') failed++; else running++; }
+    for (const r of apiRuns) { if (r.status === 'PASSED') ok++; else if (r.status === 'FAILED') failed++; else running++; }
     return [
       { label: 'Completed', value: ok, color: 'var(--success)' },
       { label: 'Failed', value: failed, color: 'var(--error)' },
       { label: 'Running', value: running, color: 'var(--warning)' },
     ];
-  }, [standardRuns, dataDrivenRuns, accessibilityRuns]);
+  }, [standardRuns, dataDrivenRuns, accessibilityRuns, apiRuns]);
 
   // Real execution counts per day for the last 7 days, from each run's own
   // startedAt timestamp — no fabricated trend data, and simply not rendered
@@ -118,13 +121,13 @@ export default function Dashboard() {
       days.push({ label: d.toLocaleDateString(undefined, { weekday: 'short' }), key: d.toDateString(), count: 0 });
     }
     const byKey = new Map(days.map(d => [d.key, d]));
-    for (const ts of [...standardRuns.map(r => r.startedAt), ...dataDrivenRuns.map(r => r.startedAt), ...accessibilityRuns.map(r => r.startedAt)]) {
+    for (const ts of [...standardRuns.map(r => r.startedAt), ...dataDrivenRuns.map(r => r.startedAt), ...accessibilityRuns.map(r => r.startedAt), ...apiRuns.map(r => r.startedAt)]) {
       const key = new Date(ts).toDateString();
       const day = byKey.get(key);
       if (day) day.count++;
     }
     return days;
-  }, [standardRuns, dataDrivenRuns, accessibilityRuns]);
+  }, [standardRuns, dataDrivenRuns, accessibilityRuns, apiRuns]);
   const last7DaysTotal = last7Days.reduce((sum, d) => sum + d.count, 0);
   const last7DaysMax = Math.max(1, ...last7Days.map(d => d.count));
 
