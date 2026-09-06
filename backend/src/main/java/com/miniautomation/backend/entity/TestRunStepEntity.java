@@ -1,5 +1,6 @@
 package com.miniautomation.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -20,6 +21,7 @@ public class TestRunStepEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "test_run_id")
+    @JsonIgnore
     private TestRunEntity testRun;
 
     private int stepOrder;

@@ -1,6 +1,8 @@
 package com.miniautomation.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -23,8 +25,9 @@ public class TestRunEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "scenario_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "steps"})
     private TestScenarioEntity scenario;
 
     private String status; // PASSED, FAILED, RUNNING
@@ -36,7 +39,15 @@ public class TestRunEntity {
     private int failedSteps;
     private int healedByAiSteps;
 
-    @OneToMany(mappedBy = "testRun", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    /**
+     * Diagnostic detail for a run that fails before any step executes (e.g. the
+     * pre-step navigate itself threw) or fails inside the async runner's catch
+     * block — previously this information only ever reached server stdout.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
+
+    @OneToMany(mappedBy = "testRun", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<TestRunStepEntity> stepResults = new ArrayList<>();
 
     public TestRunEntity() {}
@@ -124,6 +135,14 @@ public class TestRunEntity {
 
     public void setHealedByAiSteps(int healedByAiSteps) {
         this.healedByAiSteps = healedByAiSteps;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 
     public List<TestRunStepEntity> getStepResults() {
